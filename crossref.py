@@ -612,8 +612,154 @@ def main():
         </div>
         """
         st.markdown(html_temp,unsafe_allow_html=True)
+        today = datetime.date.today()
+        tomorrow = today + datetime.timedelta(days=1)
 
-        st.write('coming soon')
+        start_date = st.sidebar.date_input('Start date', today)
+        end_date = st.sidebar.date_input('End date', tomorrow)
+
+        if start_date < end_date:
+            st.success('Start date: `%s`\n\nEnd date:`%s`' % (start_date, end_date))
+        else:
+            st.error('Error: End date must fall after start date.')
+
+        user_input = st.text_input("Type in a word to query",
+        'dogs')
+        user_input = user_input.lower()
+
+        cr = Crossref()
+
+        data = cr.types(ids = "journal-article", works = True, query = str(user_input),  cursor = "*",
+               offset=None, limit = 1000,
+               filter = {'from-created-date':str(start_date), 'until-created-date':str(end_date)})
+
+        #Collect article information within the nested dictionary
+        items = [z['message']['items'] for z in data]
+        items = [item for sublist in items for item in sublist]
+
+        #Empty List to collect the features of interest
+        publisher = []
+        title = []
+        DOI = []
+        created = []
+        url = []
+        score = []
+        page = []
+        issn = []
+        subject = []
+        author_first = []
+        author_last = []
+        container_title = []
+        language = []
+
+        #Helper function to do feature extraction
+        def extract(data):
+            for x in range(0, len(data)):
+                publisher.append(data[x]['publisher'])
+                title.append(data[x]['title'])
+                DOI.append(data[x]['DOI'])
+                created.append(data[x]['created']['date-time'])
+                url.append(data[x]['URL'])
+                score.append(data[x]['score'])
+                container_title.append(data[x]['container-title'])
+                try:
+                    language.append(data[x]['language'])
+                except:
+                    language.append('none')
+                try:
+                    page.append(data[x]['page'])
+                except:
+                    page.append('none')
+
+                try:
+                    subject.append(data[x]['subject'])
+                except:
+                    subject.append('none')
+                try:
+                    issn.append(data[x]['ISSN'])
+                except:
+                    issn.append('none')
+
+                try:
+                    author_first.append(list(map(lambda x: x["given"], data[x]['author'])))
+                except:
+                    author_first.append('none')
+                try:
+                    author_last.append(list(map(lambda x: x["family"], data[x]['author'])))
+                except:
+                    author_last.append('none')
+
+        extract(items)
+
+        #Create DateFrame to view easier
+        df = pd.DataFrame()
+        df['publisher'] = publisher
+        df['title'] = title
+        df['DOI'] = DOI
+        #change date to datetime for better organization
+        df['created'] = created
+        df['created'] = pd.to_datetime(df['created'].astype(str), format="%Y-%m-%d %H:%M:%S.%f")
+        df['url'] = url
+        df['score'] = score
+        df['page'] = page
+        df['ISSN'] = issn
+        df['subject'] = subject
+        df['author_first'] = author_first
+        df['author_last'] = author_last
+        df['lang'] = language
+        df['container_title'] = container_title
+
+        #Sort the information by date
+        df = df.sort_values(by = 'created', ascending = False)
+
+        df2 = df.copy()
+        #Set 'none' to empty strings
+        col_str = ['title', 'author_first', 'author_last', 'ISSN', 'subject', 'lang']
+
+        for col in col_str:
+            df2[col] = df2[col].replace('none', '')
+
+        #combine first and last name through zip
+        df2['authors'] = df2.apply(lambda x: [m + ' ' + n for m,n in zip(x['author_first'], x['author_last'])], 1)
+
+        #drop unecessary columns
+        df2 = df2.drop(columns = ['author_first', 'author_last'])
+
+        #change list to strings
+        col_str = ['title', 'authors', 'ISSN', 'subject', 'container_title']
+
+        for col in col_str:
+            df2[col] = [','.join(map(str, l)) for l in df2[col]]
+
+
+        #change back to string and do index slicing to remove the 0's and then change back to datetime
+        df2['created'] = df2['created'].apply(lambda x: str(x))
+        df2['created'] = df2['created'].apply(lambda x: x[:-6])
+        df2['created'] = pd.to_datetime(df2['created'].astype(str), format="%Y-%m-%d %H:%M:%S")
+        df2 = df2.rename(columns = {'created': 'date'})
+
+        df2 = df2.set_index('date')
+
+
+        st.write('You can download your query here!', df2.head(10))
+        st.write(df2.tail(10))
+
+        def get_table_download_link(df):
+            """Generates a link allowing the data in a given panda dataframe to be downloaded
+            in:  dataframe
+            out: href string
+            """
+            csv = df.to_csv(index=False)
+            b64 = base64.b64encode(
+                csv.encode()
+            ).decode()  # some strings <-> bytes conversions necessary here
+            return f'<a href="data:file/csv;base64,{b64}" download="yourownquery.csv">Download Your very Own Query Searched csv file!!!</a>'
+
+        st.markdown(get_table_download_link(df2), unsafe_allow_html=True)
+
+
+
+
 
 
 
