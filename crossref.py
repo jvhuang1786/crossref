@@ -158,7 +158,7 @@ def main():
 
 
         write_up2 = """
-        I chose these categories and created lists to append them later with a helper fucntion.
+        I chose these categories and created lists to append them later with a helper function.
 
         ```python
         #Empty List to collect the features of interest
